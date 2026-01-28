@@ -1,0 +1,11 @@
+@EndUserText: {
+  label: 'Service Definition for ZC_AGENCYDB000'
+}
+@ObjectModel: {
+  leadingEntity: {
+    name: 'ZC_AGENCYDB000'
+  }
+}
+define service ZUI_AGENCYDB000_O4 provider contracts odata_v4_ui {
+  expose ZC_AGENCYDB000 as ZrAgencydb;
+}

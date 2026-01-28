@@ -1,0 +1,52 @@
+managed implementation in class ZBP_R_TRAVELDB unique;
+strict ( 2 );
+with draft;
+extensible;
+define behavior for ZR_TRAVELDB alias ZrTraveldb
+persistent table ZTRAVELDB
+extensible
+draft table ZTRAVELDB_D
+etag master LocalLastChangedAt
+lock master total etag LastChangedAt
+authorization master( global )
+{
+  field ( mandatory : create )
+   Travelid;
+
+  field ( readonly )
+   CreatedBy,
+   CreatedAt,
+   LastChangedBy,
+   LastChangedAt,
+   LocalLastChangedAt;
+
+  field ( readonly : update )
+   Travelid;
+
+
+  create;
+  update;
+  delete;
+
+  draft action Activate optimized;
+  draft action Discard;
+  draft action Edit;
+  draft action Resume;
+  draft determine action Prepare;
+
+  mapping for ZTRAVELDB corresponding extensible
+  {
+    Travelid = travelid;
+    Agencyid = agencyid;
+    Begindate = begindate;
+    Enddate = enddate;
+    Price = price;
+    Waers = waers;
+    CreatedBy = created_by;
+    CreatedAt = created_at;
+    LastChangedBy = last_changed_by;
+    LastChangedAt = last_changed_at;
+    LocalLastChangedAt = local_last_changed_at;
+  }
+
+}
