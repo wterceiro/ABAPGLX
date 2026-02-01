@@ -1,0 +1,271 @@
+*--------------------------------------------------------------------*
+*  William Terceiro - GLX DEMO
+*** BAdI usage
+*-- Validate accounting document
+*
+*** How to report validation message?
+*-- Please check the BAdI documentation for standard messages from
+*-- message class FIN_SUB_VAL. In case no proper message is found,
+*-- you may use the generic placeholder message 000 '&1 &2 &3 &4'.
+*-- For example, if you want to raise message 'Posting with document
+*-- type ABC is not supported for transaction type XYZ', you can raise
+*-- the message as follows:
+*   validationmessage-msgid = 'FIN_SUB_VAL'.
+*   validationmessage-msgty = 'E'.
+*   validationmessage-msgno = '000'.
+*   validationmessage-msgv1 = 'Posting with document type '.
+*   validationmessage-msgv2 = accountingdocheader-accountingdocumenttype.
+*   validationmessage-msgv3 = 'is not supported for transaction type '.
+*   validationmessage-msgv4 = accountingdocheader-businesstransactiontype.
+*
+*-- Note: only message type E is allowed, others are ignored
+*--------------------------------------------------------------------*
+
+
+*DATA: lo_client                     TYPE REF TO IF_BLE_HTTP_CLIENT,
+DATA: lo_request                    TYPE REF TO IF_BLE_HTTP_REQUEST,
+      lo_response                   TYPE REF TO IF_BLE_HTTP_RESPONSE,
+      lo_error                      TYPE REF TO CX_BLE_HTTP_EXCEPTION,
+      lv_url                        TYPE STRING,
+      lv_csrf                       TYPE string,
+      lv_requestbody                TYPE string,
+      lo_authorization64            type string value 'Basic TVk0MDI0ODBfVVNFUjpCWFg4bHBIcHlNZXFCcGFDV1RiR1dYaEhrV2ltKUN3dEd5Z0dsQmdL',
+      lo_authorization              type string,
+      lo_user                       type string value 'MY402480_USER',
+      lo_password                   type string value 'BXX8lpHpyMeqBpaCWTbGWXhHkWim)CwtGygGlBgK',
+      lv_apirooturl                 TYPE string VALUE '/YY1_LMANTICIPOQRYAPI_CDS/YY1_LMANTICIPOQRYAPI'.
+
+    DATA: ls_item       TYPE fins_acdoc_item_in.
+    DATA: lt_item       TYPE fin_t_acdoc_item_in.
+    DATA: lv_po(10)     TYPE c.
+    CLEAR: validationmessage.
+    DATA(lo_buffer) = zxbase64=>get_instance( ).
+
+
+   LOOP AT accountingdocitems INTO ls_item.
+        IF not ls_item-PURCHASINGDOCUMENT IS INITIAL.
+
+   Select single purchasingdocument from I_OPERATIONALACCTGDOCITEM
+          where companycode = @ACCOUNTINGDOCHEADER-companycode and
+            PurchasingDocument = @ls_item-PURCHASINGDOCUMENT and
+            AccountingDocumentType = 'RE'
+            and clearingjournalentry is initial
+                into @lv_po
+              PRIVILEGED ACCESS.
+
+  if not lv_po  is initial.
+
+     Select single purchaseorder from C_PurchaseOrderItemDEX
+          where purchaseorder =  @ls_item-PURCHASINGDOCUMENT and
+                companycode = @ACCOUNTINGDOCHEADER-companycode
+                and IsFinallyInvoiced = 'X'
+                              into @lv_po
+                PRIVILEGED ACCESS.
+
+    if not lv_po  is initial.
+         CL_BLE_TRACE_WRITER=>write_info_message( message = |PO : { ls_item-PURCHASINGDOCUMENT }| ).
+         CL_BLE_TRACE_WRITER=>write_info_message( message = |if full invoiced | ).
+          validationmessage-msgid = 'FIN_SUB_VAL'.
+          validationmessage-msgty = 'E'.
+          validationmessage-msgno = '000'.
+          validationmessage-msgv1 = 'ERRO PO already invoiced'.
+          EXIT.
+    endif.
+
+  endif.
+
+
+
+        ENDIF.
+
+  ENDLOOP.
+
+
+*|*   Case1: Dcoument type ‘SU’ and application 'post park document',
+**          trading partner cannot be null and trading partner cannot be same.
+*    IF accountingdocheader-accountingdocumenttype = 'SU' AND
+*       ( accountingdocheader-transactioncode = 'FV50' OR
+*         accountingdocheader-transactioncode = 'FBVB' ).
+*      lt_item[] = accountingdocitems[].
+*      LOOP AT accountingdocitems INTO ls_item.
+**       Trading partner cannot be null
+*        IF ls_item-partnercompany IS INITIAL.
+*          validationmessage-msgid = 'FIN_SUB_VAL'.
+*          validationmessage-msgty = 'E'.
+*          validationmessage-msgno = '001'.
+*          EXIT.
+*        ENDIF.
+*
+**       Trading partner cannot be same
+*        DELETE lt_item INDEX 1.
+*        READ TABLE lt_item TRANSPORTING NO FIELDS
+*             WITH KEY partnercompany =  ls_item-partnercompany.
+*        IF sy-subrc = 0.
+*          validationmessage-msgid = 'FIN_SUB_VAL'.
+*          validationmessage-msgty = 'E'.
+*          validationmessage-msgno = '002'.
+*          EXIT.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+*    IF validationmessage IS NOT INITIAL.
+*      RETURN.
+*    ENDIF.
+*
+**   Case2: Cannot combine different purchase orders from different purchase,
+**          to created one supplier invoice.
+*    IF accountingdocheader-transactioncode = 'MIRO' OR
+*       accountingdocheader-businesstransactiontype = 'RMRP'.
+*      LOOP AT accountingdocitems INTO ls_item.
+*        IF ls_item-purchasingdocument IS NOT INITIAL.
+*          IF lv_po IS INITIAL.
+*            lv_po = ls_item-purchasingdocument.
+*          ELSE.
+*            IF ls_item-purchasingdocument <> lv_po.
+*              validationmessage-msgid = 'FIN_SUB_VAL'.
+*              validationmessage-msgty = 'E'.
+*              validationmessage-msgno = '003'.
+*              EXIT.
+*            ENDIF.
+*          ENDIF.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+*    IF validationmessage IS NOT INITIAL.
+*      RETURN.
+*    ENDIF.
+*
+**   Case3: If it is inter-company posting, trading partner is mandatory
+*    READ TABLE accountingdocitems TRANSPORTING NO FIELDS
+*         WITH KEY transactiontypedetermination = 'BUV'.
+*    IF sy-subrc = 0.
+*      LOOP AT accountingdocitems INTO ls_item.
+*        IF ls_item-partnercompany IS INITIAL.
+*          validationmessage-msgid = 'FIN_SUB_VAL'.
+*          validationmessage-msgty = 'E'.
+*          validationmessage-msgno = '001'.
+*          EXIT.
+*        ENDIF.
+*      ENDLOOP.
+*    ENDIF.
+************************* Call WebService
+**                 "Checks whether outbound comm. is available
+**                CHECK cl_ble_http_client=>is_service_available(
+**                    communication_scenario = 'YY1_LMANTICIPOS_OUT'
+**                    outbound_service       = 'YY1_LMANTICIPOS_OUT_REST'
+**                ) = abap_true.
+**
+**               "Creates the instance for the communication
+**                lo_client = cl_ble_http_client=>create(
+**                    communication_scenario = 'YY1_LMANTICIPOS_OUT'
+**                    outbound_service       = 'YY1_LMANTICIPOS_OUT_REST'
+**                ).
+**
+**               "Creates the instance for the request
+**                CLEAR: lo_request, lo_response, lv_url.
+**                lv_url = lv_apirooturl.
+**                lo_request = cl_ble_http_request=>create( ).
+**                lo_request->set_header_parameter( EXPORTING name = 'x-csrf-token' value = 'fetch' ).
+**               lo_request->set_header_parameter( EXPORTING name = 'Content-Type' value = 'application/json' ).
+**                lo_request->set_method( 'GET' )->set_resource_extension( lv_url ).
+**
+**              "Fetches the CSRF token
+**                TRY .
+**                    lo_response = lo_client->send( lo_request ).
+**                    lv_csrf     = lo_response->get_header_parameter( 'x-csrf-token' ).
+**                    CATCH cx_ble_http_exception INTO lo_error.
+**                ENDTRY.
+**
+**                    DATA(lv_url_compcode)     = accountingdocheader-companycode.
+**                    DATA(lv_url_Invoice)      = accountingdocheader-accountingdocument.
+**                    DATA(lv_url_customer)     = accountingdocitem-customer.
+**                    DATA(lv_url_Anticipo)     = lv_anticipofim.
+**
+**                   "Builds the request body payload
+**                    CLEAR: lv_requestbody.
+**                    CONCATENATE '{"Companycode": "'         lv_url_compcode
+**                                '","Invoice": "'            lv_url_Invoice
+**                                '","Customer": "'           lv_url_Customer
+**                                '","Anticipo": "'           lv_url_Anticipo
+**                                '","xUUID": "'              lv_uuid
+**                                '","Status": ""}'            INTO lv_requestbody.
+**
+**                    CLEAR: lo_request, lo_response, lv_url.
+**                    lv_url = lv_apirooturl.
+**                    lo_request = cl_ble_http_request=>create( ).
+**                    lo_request->set_header_parameter( EXPORTING name = 'x-csrf-token' value = lv_csrf ).
+**                    lo_request->set_content_type( 'application/json' ).
+**                    lo_request->set_method( 'POST' )->set_resource_extension( lv_url ).
+**                    lo_request->set_body( lv_requestbody ).
+**
+**
+***                    TRY .
+**                        lo_response = lo_client->send( lo_request ).
+**                        CATCH cx_ble_http_exception INTO lo_error.
+**                    ENDTRY.
+**
+**------------- call web service CBO ANticipos.
+
+TYPES:
+  BEGIN OF ts_subdata,
+    key   TYPE string,
+    value TYPE string,
+  END OF ts_subdata,
+  tt_subdata TYPE STANDARD TABLE OF ts_subdata WITH EMPTY KEY,
+
+  BEGIN OF ts_data,
+    text   TYPE string,
+    number TYPE i,
+    bool   TYPE abap_bool,
+    table  TYPE tt_subdata,
+  END OF ts_data.
+
+DATA:
+  ls_data TYPE ts_data.
+
+ CL_BLE_TRACE_WRITER=>write_info_message( message = |Header companycode : { ACCOUNTINGDOCHEADER-companycode } | ).
+ CL_BLE_TRACE_WRITER=>write_info_message( message = |Num document : { ACCOUNTINGDOCHEADER-ACCOUNTINGDOCUMENT } | ).
+
+************************* Call WebService
+* "Checks whether outbound comm. is available
+   CHECK cl_ble_http_client=>is_service_available(
+        communication_scenario = 'YY1_LMANTICIPOOUT'
+        outbound_service       = 'YY1_LMANTICIPOOUTBOUND_REST'
+                ) = abap_true.
+
+DATA lv_request_body TYPE string.
+lv_request_body = ' '.
+
+* Create HTTP client to access the outbound service
+DATA(lo_client) = cl_ble_http_client=>create(
+    communication_scenario = 'YY1_LMANTICIPOOUT'
+    outbound_service       = 'YY1_LMANTICIPOOUTBOUND_REST'
+).
+
+*Ceates the instance for the request
+CLEAR: lo_request, lo_response, lv_url.
+lv_url = lv_apirooturl.
+lo_request = cl_ble_http_request=>create( ).
+*        lo_request->set_header_parameter(  name = 'Authorization' value = lo_authorization64  ).
+*        lo_request->set_header_parameter(  name = 'Content-Type' value = 'application/json' ).
+         lo_request->set_url_parameter(  name = '$filter' value = 'Invoice eq ''9400000001''' ).
+         lo_request->set_method( 'GET' )->set_resource_extension( lv_url ).
+
+**              "Fetches the CSRF token
+    TRY .
+        lo_response = lo_client->send( lo_request ).
+        DATA(lo_result) = lo_response->get_body(  ).
+
+        CL_BLE_TRACE_WRITER=>write_info_message( message = |Response : { lo_result } | ).
+
+
+*        SEARCH  FOR 'itt '.
+*WRITE: / 'itt   ', SY-SUBRC UNDER 'SY-SUBRC',
+*                   SY-FDPOS UNDER 'SY-FDPOS'
+
+
+
+
+
+    CATCH cx_ble_http_exception INTO lo_error.
+    ENDTRY.
