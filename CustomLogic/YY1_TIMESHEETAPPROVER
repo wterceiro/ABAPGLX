@@ -1,1 +1,92 @@
 
+*------------------------------------------------------------------------------------------
+**    Use this BAdI to determine the approver for each timesheet record.
+**    In this case output parameter APPROVERPERSON should hold the personworkagreement of approver
+**        OR
+**    Use this BAdI to auto approve the Timesheet record
+**    In this case output parameter ISAUTOAPRVTMESHTRECREQD set to ABAP_TRUE
+**       OR
+**    If both output parameters APPROVERPERSON and ISAUTOAPRVTMESHTRECREQD are empty or null
+**    then fallback approver determination is as follows for Timesheet tasks
+**     --------------------------------------------
+**    | Accouting Object       | Approver          |
+**     --------------------------------------------
+**    | CPM Projects           | Project Manager   |
+**    | Tasks Types(Ex: ADMI)  | Auto Approval     |
+**    | Cost Center            | Auto Approval     |
+**    | Internal Order         | Auto Approval     |
+**    | WBS Elements           | Auto Approval     |
+**    | Others                 | Auto Approval     |
+**    ---------------------------------------------
+*
+**    If both output parameters APPROVERPERSON and ISAUTOAPRVTMESHTRECREQD are not empty
+**    then to avoid ambiguity APPROVERPERSON has given the highest priority.
+*------------------------------------------------------------------------------------------
+
+
+*------------------------------------------------------------------------------------------
+*** Approver (Line Manager): Non-Project Related tasks like Administration, travel etc
+*------------------------------------------------------------------------------------------
+    IF timeentry-timesheettasktype IS NOT INITIAL.
+      DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
+      SELECT SINGLE managerpersonworkagreement
+      FROM  i_perswrkagrmtmanagerforkeydte( p_keydate = @lv_date ) WITH PRIVILEGED ACCESS
+      WHERE personworkagreement = @timeentry-personworkagreement
+      INTO @DATA(lv_approver_perswrkagrmt).
+
+      approverperson  = lv_approver_perswrkagrmt.
+      RETURN.
+    ENDIF.
+
+*------------------------------------------------------------------------------------------
+
+
+* -------------- Below commneted code are Sample Exmpales -------------------------------
+
+***** 1) If the task type is Administrator then approval by line manager is required otherwise auto approve.
+**    IF timeentry-timesheettasktype IS NOT INITIAL.
+**      IF timeentry-timesheettasktype = 'ADMI'.
+**        approverperson  = lv_approver_perswrkagrmt.
+**        RETURN.
+**      ELSE.
+**        isautoaprvtmeshtrecreqd = abap_true.   " ex: Training, Travel etc are auto approved.
+**        RETURN.
+**      ENDIF.
+**    ENDIF.
+
+
+***** 2) If activity type is 'Junior Consultant' then approval is required otherwise auto approve others records
+**    IF timeentry-activitytype = 'T001'.
+**      approverperson  = lv_approver_perswrkagrmt.   " Approver could be Project Manager
+**    ELSE.
+**      isautoaprvtmeshtrecreqd = abap_true.
+**    ENDIF.
+
+
+
+***------------------------------------------------------------------------------------------
+***** Auto Approve the TimeSheet records for the following Tasks.
+**    " 1 Receiver Cost Center
+**    " 2 Internal Order
+***------------------------------------------------------------------------------------------
+**    IF timeentry-activitytype IS NOT INITIAL AND
+**       ( timeentry-receivercostcenter IS NOT INITIAL OR
+**         timeentry-internalorder      IS NOT INITIAL ).
+**      isautoaprvtmeshtrecreqd = abap_true.
+**    ENDIF.
+***------------------------------------------------------------------------------------------
+
+
+***------------------------------------------------------------------------------------------
+***** Approver (Project Manager):  CPM Projects
+***------------------------------------------------------------------------------------------
+**    IF timeentry-wbselement IS NOT INITIAL AND timeentry-activitytype IS NOT INITIAL.
+***      managerpersonworkagreement  = .  " Determine and set the project Manager/Proj. Controller as approver
+**    ENDIF.
+***------------------------------------------------------------------------------------------
+
+
+***** If approver is not determined then auto approve the time records
+**    IF approverperson IS INITIAL.
+**      isautoaprvtmeshtrecreqd = abap_true.
+**    ENDIF.
