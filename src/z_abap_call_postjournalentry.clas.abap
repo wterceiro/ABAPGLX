@@ -1,3 +1,25 @@
+**********************************************************************
+* William Terceiro
+* como chamar essa Classe dentro do Custom logic :
+******** Definir um data como :
+* DATA(fi_buffer) = z_abap_call_postjournalentry=>get_instance( ).
+* data xretorno type string.
+* data xnumdoc  type string.
+******      Obter um numero documento :
+*     xnumdoc = accountingdocheader-accountingdocument.
+*
+******   Verificar o cliente e se tipo documento Venda
+*
+*    IF  accountingdocitem-customer = '0014100001' and  accountingdocheader-accountingdocumenttype = 'RV'.
+*
+******    Chamar o metodo create_je passando o numero do documento para a o parametro lt_numdoc da classe e obter o retorno
+*       xretorno =  fi_buffer->create_je( lt_numdoc = xnumdoc ).
+*
+*       CL_BLE_TRACE_WRITER=>write_info_message( message = |passou pelo teste : { xretorno } | ).
+*              substitutiondone = abap_true.
+*
+*    endif.*
+
 CLASS z_abap_call_postjournalentry DEFINITION
   PUBLIC
   FINAL
@@ -10,7 +32,7 @@ CLASS z_abap_call_postjournalentry DEFINITION
             importing lt_numdoc type string
             Returning
             value(ro_retorno) type string.
-            INTERFACES if_oo_adt_classrun . ""IMPORTING is_je TYPE zcjournal_entry_create_reque19.
+
 
     CLASS-METHODS get_instance
               RETURNING
@@ -162,10 +184,4 @@ CLASS Z_ABAP_CALL_POSTJOURNALENTRY IMPLEMENTATION.
     ro_instance = mo_instance.
   ENDMETHOD.
 
-
-  METHOD if_oo_adt_classrun~main.
-    data: xnumdoc type string value '99999999999'.
-    create_je( lt_numdoc = xnumdoc ).
-
-  ENDMETHOD.
 ENDCLASS.
